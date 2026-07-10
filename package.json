@@ -5,16 +5,20 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "demo": "tsx src/demo.ts",
-    "test": "node --import tsx --test test/*.test.ts"
+    "demo": "tsx src/Demo.ts",
+    "format": "oxfmt .",
+    "test": "vitest run"
   },
   "dependencies": {
     "effect": "4.0.0-beta.90"
   },
   "devDependencies": {
+    "@effect/vitest": "4.0.0-beta.90",
     "@types/node": "^24.0.0",
+    "oxfmt": "0.48.0",
     "tsx": "^4.20.0",
-    "typescript": "^6.0.0"
+    "typescript": "^6.0.0",
+    "vitest": "4.1.4"
   },
   "packageManager": "pnpm@11.10.0"
 }

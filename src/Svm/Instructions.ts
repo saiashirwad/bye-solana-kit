@@ -1,19 +1,26 @@
-import { address, addressToBytes, findProgramDerivedAddress, type Address, type ProgramDerivedAddress } from "./address.js"
-import { AccountRole, type Instruction } from "./message.js"
+import { address, addressToBytes, findProgramDerivedAddress, type Address } from "./SvmAddress.ts"
+import { SvmProtocolError } from "./SvmError.ts"
+import { AccountRole, type Instruction } from "./TransactionMessage.ts"
 
-export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS = address("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS = address(
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+)
 export const COMPUTE_BUDGET_PROGRAM_ADDRESS = address("ComputeBudget111111111111111111111111111111")
 export const MEMO_PROGRAM_ADDRESS = address("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")
 
 const u32le = (value: number) => {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) throw new RangeError("Expected a u32")
+  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+    throw new SvmProtocolError({ message: "Expected a u32" })
+  }
   const bytes = new Uint8Array(4)
   new DataView(bytes.buffer).setUint32(0, value, true)
   return bytes
 }
 
 const u64le = (value: bigint) => {
-  if (value < 0n || value > 0xffffffffffffffffn) throw new RangeError("Expected a u64")
+  if (value < 0n || value > 0xffffffffffffffffn) {
+    throw new SvmProtocolError({ message: "Expected a u64" })
+  }
   const bytes = new Uint8Array(8)
   new DataView(bytes.buffer).setBigUint64(0, value, true)
   return bytes
@@ -58,7 +65,7 @@ export interface TransferCheckedInput {
 
 export const getTransferCheckedInstruction = (input: TransferCheckedInput): Instruction => {
   if (!Number.isInteger(input.decimals) || input.decimals < 0 || input.decimals > 255) {
-    throw new RangeError("Decimals must be a u8")
+    throw new SvmProtocolError({ message: "Decimals must be a u8" })
   }
   return {
     programAddress: input.tokenProgram,
@@ -76,7 +83,7 @@ export const findAssociatedTokenPda = (input: {
   readonly owner: Address
   readonly tokenProgram: Address
   readonly mint: Address
-}): Promise<ProgramDerivedAddress> => {
+}) => {
   return findProgramDerivedAddress(ASSOCIATED_TOKEN_PROGRAM_ADDRESS, [
     addressToBytes(input.owner),
     addressToBytes(input.tokenProgram),

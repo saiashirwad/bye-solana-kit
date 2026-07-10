@@ -1,4 +1,4 @@
-import type { Address, Blockhash } from "./address.js"
+import type { Address, Blockhash } from "./SvmAddress.ts"
 
 export enum AccountRole {
   READONLY = 0,
@@ -30,7 +30,10 @@ export interface TransactionMessage {
 
 export const createTransactionMessage = (): TransactionMessage => ({ version: 0, instructions: [] })
 
-export const setTransactionMessageFeePayer = (feePayer: Address, message: TransactionMessage): TransactionMessage => ({
+export const setTransactionMessageFeePayer = (
+  feePayer: Address,
+  message: TransactionMessage,
+): TransactionMessage => ({
   ...message,
   feePayer,
 })

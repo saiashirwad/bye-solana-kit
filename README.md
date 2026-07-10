@@ -6,7 +6,8 @@ Standalone proof-of-concept for building and signing the Crosshatch Solana trans
 - `@solana/signers`
 - `@solana-program/*`
 
-It has no `@solana/*` dependencies. It locally implements the narrow protocol surface Crosshatch uses:
+It has no `@solana/*` dependencies. It locally implements the narrow protocol surface Crosshatch
+uses:
 
 - Base58 addresses and PDA derivation
 - Version-0 messages with static accounts and a blockhash lifetime
@@ -14,9 +15,11 @@ It has no `@solana/*` dependencies. It locally implements the narrow protocol su
 - Local WebCrypto Ed25519 signing and Base64 transaction serialization
 - The five program-specific helpers used by Crosshatch
 
-It intentionally does not implement lookup tables, durable nonces, legacy messages, remote signers, or RPC clients.
+It intentionally does not implement lookup tables, durable nonces, legacy messages, remote signers,
+or RPC clients.
 
-The only production dependency is `effect`. BIP-39 seed derivation uses the WebCrypto PBKDF2 primitive directly.
+The only production dependency is `effect`. BIP-39 seed derivation uses the WebCrypto PBKDF2
+primitive directly.
 
 ```sh
 pnpm install

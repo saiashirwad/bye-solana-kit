@@ -1,5 +1,5 @@
-import assert from "node:assert/strict"
-import { describe, it } from "node:test"
+import { describe, expect, it } from "@effect/vitest"
+import { Effect } from "effect"
 
 import {
   findAssociatedTokenPda,
@@ -7,19 +7,21 @@ import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
   getTransferCheckedInstruction,
-} from "../src/solana/instructions.js"
-import { address } from "../src/solana/address.js"
-import { AccountRole } from "../src/solana/message.js"
+} from "../src/Svm/Instructions.ts"
+import { address } from "../src/Svm/SvmAddress.ts"
+import { AccountRole } from "../src/Svm/TransactionMessage.ts"
 
 const mint = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
 const owner = address("39LoiUgZejnJYJVhvvAnxkMooM1uJ15Hkiz2iXTUwF65")
 const tokenProgram = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
 
-describe("local instruction builders", () => {
+describe(import.meta.url, () => {
   it("encodes compute budget and memo instructions", () => {
-    assert.deepEqual([...getSetComputeUnitLimitInstruction(100_000).data!], [2, 160, 134, 1, 0])
-    assert.deepEqual([...getSetComputeUnitPriceInstruction(100_000n).data!], [3, 160, 134, 1, 0, 0, 0, 0, 0])
-    assert.equal(new TextDecoder().decode(getAddMemoInstruction("hello").data), "hello")
+    expect([...getSetComputeUnitLimitInstruction(100_000).data!]).toEqual([2, 160, 134, 1, 0])
+    expect([...getSetComputeUnitPriceInstruction(100_000n).data!]).toEqual([
+      3, 160, 134, 1, 0, 0, 0, 0, 0,
+    ])
+    expect(new TextDecoder().decode(getAddMemoInstruction("hello").data)).toBe("hello")
   })
 
   it("encodes transferChecked accounts and data", () => {
@@ -32,18 +34,21 @@ describe("local instruction builders", () => {
       amount: 1_000_000n,
       decimals: 6,
     })
-    assert.deepEqual(instruction.accounts?.map((account) => account.role), [
+    expect(instruction.accounts?.map((account) => account.role)).toEqual([
       AccountRole.WRITABLE,
       AccountRole.READONLY,
       AccountRole.WRITABLE,
       AccountRole.READONLY_SIGNER,
     ])
-    assert.deepEqual([...instruction.data!], [12, 64, 66, 15, 0, 0, 0, 0, 0, 6])
+    expect([...instruction.data!]).toEqual([12, 64, 66, 15, 0, 0, 0, 0, 0, 6])
   })
 
-  it("derives the associated token address", async () => {
-    const [ata, bump] = await findAssociatedTokenPda({ owner, mint, tokenProgram })
-    assert.equal(ata, "4LNjjuvNT3YkfmQhMRMBJriwsTTvNzPahTPoBEJVuA3x")
-    assert.equal(bump, 255)
-  })
+  it.effect(
+    "derives the associated token address",
+    Effect.fn(function* () {
+      const [ata, bump] = yield* findAssociatedTokenPda({ owner, mint, tokenProgram })
+      expect(ata).toBe("4LNjjuvNT3YkfmQhMRMBJriwsTTvNzPahTPoBEJVuA3x")
+      expect(bump).toBe(255)
+    }),
+  )
 })

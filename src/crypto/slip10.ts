@@ -1,10 +1,12 @@
 import { Effect } from "effect"
 
+import { CryptoError } from "./CryptoError.ts"
+
 const HARDENED = 0x80000000
 const MAX_INDEX = HARDENED - 1
 const ED25519_SEED = new TextEncoder().encode("ed25519 seed")
 
-interface Node {
+interface Slip10Node {
   readonly privateKey: Uint8Array
   readonly chainCode: Uint8Array
 }
@@ -17,31 +19,32 @@ const hmacSha512 = Effect.fnUntraced(function* (key: Uint8Array, data: Uint8Arra
   return new Uint8Array(digest)
 })
 
-const nodeFromDigest = (digest: Uint8Array): Node => ({
+const toNode = (digest: Uint8Array): Slip10Node => ({
   privateKey: digest.slice(0, 32),
   chainCode: digest.slice(32),
 })
 
-const deriveChild = Effect.fnUntraced(function* (node: Node, index: number) {
+const child = Effect.fnUntraced(function* (node: Slip10Node, index: number) {
   const data = new Uint8Array(37)
   data[0] = 0
   data.set(node.privateKey, 1)
   new DataView(data.buffer).setUint32(33, index + HARDENED, false)
-  return nodeFromDigest(yield* hmacSha512(node.chainCode, data))
+  return toNode(yield* hmacSha512(node.chainCode, data))
 })
 
-/** All path components are hardened; [44, 501, 0, 0] means m/44'/501'/0'/0'. */
 export const derivePrivateKey = Effect.fnUntraced(function* (
   seed: Uint8Array,
   path: ReadonlyArray<number>,
 ) {
   for (const index of path) {
     if (!Number.isInteger(index) || index < 0 || index > MAX_INDEX) {
-      return yield* Effect.fail(new RangeError(`Invalid SLIP-0010 path component: ${index}`))
+      return yield* Effect.fail(
+        new CryptoError({ message: `Invalid SLIP-0010 path component: ${index}` }),
+      )
     }
   }
 
-  let node = nodeFromDigest(yield* hmacSha512(ED25519_SEED, seed))
-  for (const index of path) node = yield* deriveChild(node, index)
+  let node = toNode(yield* hmacSha512(ED25519_SEED, seed))
+  for (const index of path) node = yield* child(node, index)
   return node.privateKey
 })
