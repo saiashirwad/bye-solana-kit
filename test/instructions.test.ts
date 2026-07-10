@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
 
 import {
   findAssociatedTokenPda,
@@ -16,9 +17,9 @@ const tokenProgram = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
 
 describe("local instruction builders", () => {
   it("encodes compute budget and memo instructions", () => {
-    expect([...getSetComputeUnitLimitInstruction(100_000).data!]).toEqual([2, 160, 134, 1, 0])
-    expect([...getSetComputeUnitPriceInstruction(100_000n).data!]).toEqual([3, 160, 134, 1, 0, 0, 0, 0, 0])
-    expect(new TextDecoder().decode(getAddMemoInstruction("hello").data)).toBe("hello")
+    assert.deepEqual([...getSetComputeUnitLimitInstruction(100_000).data!], [2, 160, 134, 1, 0])
+    assert.deepEqual([...getSetComputeUnitPriceInstruction(100_000n).data!], [3, 160, 134, 1, 0, 0, 0, 0, 0])
+    assert.equal(new TextDecoder().decode(getAddMemoInstruction("hello").data), "hello")
   })
 
   it("encodes transferChecked accounts and data", () => {
@@ -31,18 +32,18 @@ describe("local instruction builders", () => {
       amount: 1_000_000n,
       decimals: 6,
     })
-    expect(instruction.accounts?.map((account) => account.role)).toEqual([
+    assert.deepEqual(instruction.accounts?.map((account) => account.role), [
       AccountRole.WRITABLE,
       AccountRole.READONLY,
       AccountRole.WRITABLE,
       AccountRole.READONLY_SIGNER,
     ])
-    expect([...instruction.data!]).toEqual([12, 64, 66, 15, 0, 0, 0, 0, 0, 6])
+    assert.deepEqual([...instruction.data!], [12, 64, 66, 15, 0, 0, 0, 0, 0, 6])
   })
 
   it("derives the associated token address", async () => {
     const [ata, bump] = await findAssociatedTokenPda({ owner, mint, tokenProgram })
-    expect(ata).toBe("4LNjjuvNT3YkfmQhMRMBJriwsTTvNzPahTPoBEJVuA3x")
-    expect(bump).toBe(255)
+    assert.equal(ata, "4LNjjuvNT3YkfmQhMRMBJriwsTTvNzPahTPoBEJVuA3x")
+    assert.equal(bump, 255)
   })
 })

@@ -6,17 +6,15 @@
   "scripts": {
     "build": "tsc --noEmit",
     "demo": "tsx src/demo.ts",
-    "test": "vitest run"
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "effect": "4.0.0-beta.90",
-    "ox": "0.10.6"
+    "effect": "4.0.0-beta.90"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
-    "typescript": "^6.0.0",
-    "vitest": "^4.0.0"
+    "typescript": "^6.0.0"
   },
   "packageManager": "pnpm@11.10.0"
 }

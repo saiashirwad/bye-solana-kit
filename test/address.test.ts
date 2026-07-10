@@ -1,16 +1,17 @@
-import { describe, expect, it } from "vitest"
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
 
 import { address, addressFromBytes, addressToBytes, base58Decode, base58Encode } from "../src/solana/address.js"
 
 describe("Solana addresses", () => {
   it("roundtrips 32-byte addresses including all zeroes", () => {
     const zeroes = new Uint8Array(32)
-    expect(base58Encode(zeroes)).toBe("11111111111111111111111111111111")
-    expect(base58Decode("11111111111111111111111111111111")).toEqual(zeroes)
-    expect(addressToBytes(addressFromBytes(zeroes))).toEqual(zeroes)
+    assert.equal(base58Encode(zeroes), "11111111111111111111111111111111")
+    assert.deepEqual(base58Decode("11111111111111111111111111111111"), zeroes)
+    assert.deepEqual(addressToBytes(addressFromBytes(zeroes)), zeroes)
   })
 
   it("rejects Base58 values that are not 32 bytes", () => {
-    expect(() => address("1111")).toThrow(/32 bytes/)
+    assert.throws(() => address("1111"), /32 bytes/)
   })
 })

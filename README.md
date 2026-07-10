@@ -16,6 +16,8 @@ It has no `@solana/*` dependencies. It locally implements the narrow protocol su
 
 It intentionally does not implement lookup tables, durable nonces, legacy messages, remote signers, or RPC clients.
 
+The only production dependency is `effect`. BIP-39 seed derivation uses the WebCrypto PBKDF2 primitive directly.
+
 ```sh
 pnpm install
 pnpm test

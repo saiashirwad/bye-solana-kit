@@ -1,5 +1,6 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
 import { Effect, Encoding, pipe } from "effect"
-import { describe, expect, it } from "vitest"
 
 import {
   findAssociatedTokenPda,
@@ -61,11 +62,11 @@ const makeTransaction = Effect.gen(function* () {
 describe("local v0 transaction protocol", () => {
   it("matches the official compiled-message and wire fixtures byte-for-byte", async () => {
     const { signer, transaction } = await Effect.runPromise(makeTransaction)
-    expect(signer.address).toBe("HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk")
-    expect(Object.keys(transaction.signatures)).toEqual([signer.address])
-    expect(Encoding.encodeHex(transaction.messageBytes)).toBe(EXPECTED_MESSAGE)
+    assert.equal(signer.address, "HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk")
+    assert.deepEqual(Object.keys(transaction.signatures), [signer.address])
+    assert.equal(Encoding.encodeHex(transaction.messageBytes), EXPECTED_MESSAGE)
     const signed = await Effect.runPromise(signer.signTransaction(transaction))
-    expect(getBase64EncodedWireTransaction(signed)).toBe(EXPECTED_WIRE)
+    assert.equal(getBase64EncodedWireTransaction(signed), EXPECTED_WIRE)
   })
 
   it("rejects a signer that is not required by the transaction", async () => {
@@ -79,9 +80,7 @@ describe("local v0 transaction protocol", () => {
       }, value),
       (value) => appendTransactionMessageInstructions([getAddMemoInstruction("no signer")], value),
     )
-    await expect(Effect.runPromise(signer.signTransaction(compileTransaction(message)))).rejects.toThrow(
-      /not required/,
-    )
+    await assert.rejects(() => Effect.runPromise(signer.signTransaction(compileTransaction(message))), /not required/)
   })
 
   it("matches the official partial-signing fixture with an external fee payer", async () => {
@@ -113,10 +112,10 @@ describe("local v0 transaction protocol", () => {
       ], value),
     )
     const transaction = compileTransaction(message)
-    expect(Object.keys(transaction.signatures)).toEqual([feePayer, signer.address])
-    expect(Encoding.encodeHex(transaction.messageBytes)).toBe(EXPECTED_PARTIAL_MESSAGE)
+    assert.deepEqual(Object.keys(transaction.signatures), [feePayer, signer.address])
+    assert.equal(Encoding.encodeHex(transaction.messageBytes), EXPECTED_PARTIAL_MESSAGE)
     const signed = await Effect.runPromise(signer.signTransaction(transaction))
-    expect(signed.signatures[feePayer]).toBeNull()
-    expect(getBase64EncodedWireTransaction(signed)).toBe(EXPECTED_PARTIAL_WIRE)
+    assert.equal(signed.signatures[feePayer], null)
+    assert.equal(getBase64EncodedWireTransaction(signed), EXPECTED_PARTIAL_WIRE)
   })
 })
