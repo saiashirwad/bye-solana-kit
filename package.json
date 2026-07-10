@@ -1,0 +1,27 @@
+{
+  "name": "bye-solana-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "demo": "tsx src/demo.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@solana/addresses": "6.10.0",
+    "@solana/instructions": "6.10.0",
+    "@solana/rpc-types": "6.10.0",
+    "@solana/transaction-messages": "6.10.0",
+    "@solana/transactions": "6.10.0",
+    "effect": "4.0.0-beta.90",
+    "ox": "0.10.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^6.0.0",
+    "vitest": "^4.0.0"
+  },
+  "packageManager": "pnpm@11.10.0"
+}
