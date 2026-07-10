@@ -9,11 +9,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@solana/addresses": "6.10.0",
-    "@solana/instructions": "6.10.0",
-    "@solana/rpc-types": "6.10.0",
-    "@solana/transaction-messages": "6.10.0",
-    "@solana/transactions": "6.10.0",
     "effect": "4.0.0-beta.90",
     "ox": "0.10.6"
   },

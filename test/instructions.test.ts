@@ -1,5 +1,3 @@
-import { address } from "@solana/addresses"
-import { AccountRole } from "@solana/instructions"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -9,6 +7,8 @@ import {
   getSetComputeUnitPriceInstruction,
   getTransferCheckedInstruction,
 } from "../src/solana/instructions.js"
+import { address } from "../src/solana/address.js"
+import { AccountRole } from "../src/solana/message.js"
 
 const mint = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
 const owner = address("39LoiUgZejnJYJVhvvAnxkMooM1uJ15Hkiz2iXTUwF65")
@@ -42,8 +42,7 @@ describe("local instruction builders", () => {
 
   it("derives the associated token address", async () => {
     const [ata, bump] = await findAssociatedTokenPda({ owner, mint, tokenProgram })
-    expect(ata).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)
-    expect(bump).toBeGreaterThanOrEqual(0)
-    expect(bump).toBeLessThanOrEqual(255)
+    expect(ata).toBe("4LNjjuvNT3YkfmQhMRMBJriwsTTvNzPahTPoBEJVuA3x")
+    expect(bump).toBe(255)
   })
 })

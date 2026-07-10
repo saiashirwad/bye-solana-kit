@@ -1,12 +1,11 @@
-import { address } from "@solana/addresses"
 import {
   appendTransactionMessageInstructions,
   createTransactionMessage,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
-} from "@solana/transaction-messages"
-import { blockhash } from "@solana/rpc-types"
-import { compileTransaction, getBase64EncodedWireTransaction } from "@solana/transactions"
+} from "./solana/message.js"
+import { address } from "./solana/address.js"
+import { compileTransaction, getBase64EncodedWireTransaction } from "./solana/transaction.js"
 import { Effect, pipe } from "effect"
 
 import {
@@ -31,10 +30,10 @@ const program = Effect.gen(function* () {
   ])
 
   const message = pipe(
-    createTransactionMessage({ version: 0 }),
+    createTransactionMessage(),
     (value) => setTransactionMessageFeePayer(signer.address, value),
     (value) => setTransactionMessageLifetimeUsingBlockhash({
-      blockhash: blockhash("11111111111111111111111111111111"),
+      blockhash: address("11111111111111111111111111111111"),
       lastValidBlockHeight: 1n,
     }, value),
     (value) => appendTransactionMessageInstructions([

@@ -1,11 +1,5 @@
-import {
-  address,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-  type ProgramDerivedAddress,
-} from "@solana/addresses"
-import { AccountRole, type Instruction } from "@solana/instructions"
+import { address, addressToBytes, findProgramDerivedAddress, type Address, type ProgramDerivedAddress } from "./address.js"
+import { AccountRole, type Instruction } from "./message.js"
 
 export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS = address("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
 export const COMPUTE_BUDGET_PROGRAM_ADDRESS = address("ComputeBudget111111111111111111111111111111")
@@ -83,9 +77,9 @@ export const findAssociatedTokenPda = (input: {
   readonly tokenProgram: Address
   readonly mint: Address
 }): Promise<ProgramDerivedAddress> => {
-  const encoder = getAddressEncoder()
-  return getProgramDerivedAddress({
-    programAddress: ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
-    seeds: [encoder.encode(input.owner), encoder.encode(input.tokenProgram), encoder.encode(input.mint)],
-  })
+  return findProgramDerivedAddress(ASSOCIATED_TOKEN_PROGRAM_ADDRESS, [
+    addressToBytes(input.owner),
+    addressToBytes(input.tokenProgram),
+    addressToBytes(input.mint),
+  ])
 }

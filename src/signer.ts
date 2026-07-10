@@ -1,10 +1,10 @@
-import { getAddressFromPublicKey, type Address } from "@solana/addresses"
-import { partiallySignTransaction, type Transaction } from "@solana/transactions"
 import { Effect } from "effect"
 import { Mnemonic } from "ox"
 
 import { pairFromPrivateKeyBytes, sign } from "./crypto/ed25519.js"
 import { derivePrivateKey } from "./crypto/slip10.js"
+import { addressFromPublicKey, type Address } from "./solana/address.js"
+import { partiallySignTransaction, type Transaction } from "./solana/transaction.js"
 
 export interface SvmSigner {
   readonly address: Address
@@ -17,13 +17,12 @@ export const signerFromMnemonic = (mnemonic: string) =>
     const seed = Mnemonic.toSeed(mnemonic)
     const privateKeyBytes = yield* derivePrivateKey(seed, [44, 501, 0, 0])
     const pair = yield* pairFromPrivateKeyBytes(privateKeyBytes)
-    const signerAddress = yield* Effect.promise(() => getAddressFromPublicKey(pair.publicKey))
-    const keyPair: CryptoKeyPair = pair
+    const signerAddress = yield* addressFromPublicKey(pair.publicKey)
 
     return {
       address: signerAddress,
       sign: (data) => sign(pair.privateKey, data),
       signTransaction: <T extends Transaction>(transaction: T) =>
-        Effect.promise(() => partiallySignTransaction([keyPair], transaction)),
+        Effect.promise(() => partiallySignTransaction(transaction, { address: signerAddress, privateKey: pair.privateKey })),
     } satisfies SvmSigner
   })
