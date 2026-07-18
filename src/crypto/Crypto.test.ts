@@ -1,10 +1,10 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Encoding, Exit } from "effect"
 
-import { Ed25519Pair, Ed25519PrivateKey, Ed25519PublicKey, Slip10 } from "../src/Crypto/Crypto.ts"
-import * as Mnemonic from "../src/Mnemonic.ts"
-import { addressFromPublicKey } from "../src/Svm/SvmAddress.ts"
-import { mnemonicText } from "./Fixtures.ts"
+import * as Mnemonic from "../Mnemonic.ts"
+import { SvmAddress } from "../Svm/Svm.ts"
+import { mnemonicText } from "../Svm/Transaction.fixtures.ts"
+import { Ed25519Pair, Ed25519PrivateKey, Ed25519PublicKey, Slip10 } from "./Crypto.ts"
 
 const seed = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 
@@ -28,7 +28,7 @@ describe(import.meta.url, () => {
       expect(Encoding.encodeHex(privateKeySeed)).toBe(
         "f1f890d181d1bc1fdfdb9e1911e59285b9f8a28c5c31c13e56747e6993bfa053",
       )
-      expect(yield* addressFromPublicKey(pair.publicKey)).toBe(
+      expect(yield* SvmAddress.addressFromPublicKey(pair.publicKey)).toBe(
         "39LoiUgZejnJYJVhvvAnxkMooM1uJ15Hkiz2iXTUwF65",
       )
       expect(yield* Ed25519PublicKey.verify(pair.publicKey, signature, message)).toBe(true)

@@ -1,8 +1,5 @@
 import { Effect, Redacted, Schema as S } from "effect"
 
-// Minimal BIP-39 seed helper for demos/tests.
-// Crosshatch uses `ox` Mnemonic.toSeed at Solana call sites; this avoids that dep.
-
 export const MnemonicText = S.String.check(
   S.isPattern(
     /^(?:(?:[a-z]+ ){11}|(?:[a-z]+ ){14}|(?:[a-z]+ ){17}|(?:[a-z]+ ){20}|(?:[a-z]+ ){23})[a-z]+$/u,

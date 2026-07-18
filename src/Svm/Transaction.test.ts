@@ -1,35 +1,36 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Encoding, Exit } from "effect"
 
-import { Ed25519Pair, Slip10 } from "../src/Crypto/Crypto.ts"
-import * as Mnemonic from "../src/Mnemonic.ts"
+import { Ed25519Pair, Slip10 } from "../Crypto/Crypto.ts"
+import * as Mnemonic from "../Mnemonic.ts"
 import {
   findAssociatedTokenPda,
   getAddMemoInstruction,
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
   getTransferCheckedInstruction,
-} from "../src/Svm/Instructions.ts"
-import { address, addressFromPublicKey, Blockhash } from "../src/Svm/SvmAddress.ts"
-import {
-  compileTransaction,
-  encodeSignedTransactionMessage,
-  getBase64EncodedWireTransaction,
-  partiallySignTransaction,
-  signTransactionMessage,
-} from "../src/Svm/Transaction.ts"
-import { buildTransactionMessage, type Instruction } from "../src/Svm/TransactionMessage.ts"
+} from "./Instructions.ts"
+import { addressFromPublicKey, Blockhash, SvmAddress } from "./SvmAddress.ts"
 import {
   expectedMessage,
   expectedPartialMessage,
   expectedPartialWire,
   expectedWire,
   mnemonicText,
-} from "./Fixtures.ts"
+} from "./Transaction.fixtures.ts"
+import {
+  compileTransaction,
+  encodeSignedTransactionMessage,
+  getBase64EncodedWireTransaction,
+  partiallySignTransaction,
+  signTransactionMessage,
+} from "./Transaction.ts"
+import { buildTransactionMessage, type Instruction } from "./TransactionMessage.ts"
 
-const mint = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
-const tokenProgram = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+const mint = SvmAddress.make("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
+const tokenProgram = SvmAddress.make("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
 const blockhash = Blockhash.make("11111111111111111111111111111111")
+const system = SvmAddress.make("11111111111111111111111111111112")
 
 const deriveKeypair = Effect.gen(function* () {
   const seed = yield* Mnemonic.toSeed(Mnemonic.fromText(mnemonicText))
@@ -39,7 +40,7 @@ const deriveKeypair = Effect.gen(function* () {
   return { keypair, signerAddress }
 })
 
-const message = (feePayer: ReturnType<typeof address>, instructions: ReadonlyArray<Instruction>) =>
+const message = (feePayer: typeof SvmAddress.Type, instructions: ReadonlyArray<Instruction>) =>
   buildTransactionMessage({
     feePayer,
     lifetimeConstraint: { blockhash, lastValidBlockHeight: 1n },
@@ -51,15 +52,14 @@ describe(import.meta.url, () => {
     "matches the official compiled-message and wire fixtures byte-for-byte",
     Effect.fn(function* () {
       const { keypair, signerAddress } = yield* deriveKeypair
-      const recipient = address("11111111111111111111111111111112")
       const [[source], [destination]] = yield* Effect.all([
         findAssociatedTokenPda({ owner: signerAddress, mint, tokenProgram }),
-        findAssociatedTokenPda({ owner: recipient, mint, tokenProgram }),
+        findAssociatedTokenPda({ owner: system, mint, tokenProgram }),
       ])
       const msg = message(signerAddress, [
-        getSetComputeUnitLimitInstruction(100_000),
-        getSetComputeUnitPriceInstruction(100_000n),
-        getTransferCheckedInstruction({
+        yield* getSetComputeUnitLimitInstruction(100_000),
+        yield* getSetComputeUnitPriceInstruction(100_000n),
+        yield* getTransferCheckedInstruction({
           source,
           mint,
           destination,
@@ -70,7 +70,9 @@ describe(import.meta.url, () => {
         }),
         getAddMemoInstruction("bye @solana/kit"),
       ])
-      expect(Encoding.encodeHex(compileTransaction(msg).messageBytes)).toBe(expectedMessage)
+      expect(Encoding.encodeHex((yield* compileTransaction(msg)).messageBytes)).toBe(
+        expectedMessage,
+      )
       expect(yield* encodeSignedTransactionMessage(msg, [keypair])).toBe(expectedWire)
     }),
   )
@@ -79,9 +81,7 @@ describe(import.meta.url, () => {
     "rejects a signer that is not required by the transaction",
     Effect.fn(function* () {
       const { keypair } = yield* deriveKeypair
-      const msg = message(address("11111111111111111111111111111112"), [
-        getAddMemoInstruction("no signer"),
-      ])
+      const msg = message(system, [getAddMemoInstruction("no signer")])
       expect(Exit.isFailure(yield* Effect.exit(signTransactionMessage(msg, [keypair])))).toBe(true)
     }),
   )
@@ -90,13 +90,12 @@ describe(import.meta.url, () => {
     "matches the official partial-signing fixture with an external fee payer",
     Effect.fn(function* () {
       const { keypair, signerAddress } = yield* deriveKeypair
-      const feePayer = address("11111111111111111111111111111112")
       const [[source], [destination]] = yield* Effect.all([
         findAssociatedTokenPda({ owner: signerAddress, mint, tokenProgram }),
-        findAssociatedTokenPda({ owner: feePayer, mint, tokenProgram }),
+        findAssociatedTokenPda({ owner: system, mint, tokenProgram }),
       ])
-      const msg = message(feePayer, [
-        getTransferCheckedInstruction({
+      const msg = message(system, [
+        yield* getTransferCheckedInstruction({
           source,
           mint,
           destination,
@@ -106,10 +105,12 @@ describe(import.meta.url, () => {
           decimals: 6,
         }),
       ])
-      expect(Encoding.encodeHex(compileTransaction(msg).messageBytes)).toBe(expectedPartialMessage)
-      const signed = yield* partiallySignTransaction([keypair], compileTransaction(msg))
-      expect(signed.signatures[feePayer]).toBeNull()
-      expect(getBase64EncodedWireTransaction(signed)).toBe(expectedPartialWire)
+      expect(Encoding.encodeHex((yield* compileTransaction(msg)).messageBytes)).toBe(
+        expectedPartialMessage,
+      )
+      const signed = yield* partiallySignTransaction([keypair], yield* compileTransaction(msg))
+      expect(signed.signatures[system]).toBeNull()
+      expect(yield* getBase64EncodedWireTransaction(signed)).toBe(expectedPartialWire)
     }),
   )
 })

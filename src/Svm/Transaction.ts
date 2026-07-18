@@ -1,6 +1,6 @@
 import { Effect, Encoding } from "effect"
 
-import { Ed25519PrivateKey, sign } from "../Crypto/Ed25519PrivateKey.ts"
+import { Ed25519PrivateKey } from "../Crypto/Crypto.ts"
 import { addressFromPublicKey, addressToBytes, type Address } from "./SvmAddress.ts"
 import { SvmProtocolError } from "./SvmError.ts"
 import { AccountRole, type Instruction, type TransactionMessage } from "./TransactionMessage.ts"
@@ -8,7 +8,6 @@ import { AccountRole, type Instruction, type TransactionMessage } from "./Transa
 export interface Transaction {
   readonly messageBytes: Uint8Array
   readonly signatures: Readonly<Record<Address, Uint8Array | null>>
-  readonly lifetimeConstraint: NonNullable<TransactionMessage["lifetimeConstraint"]>
 }
 
 interface OrderedAccount {
@@ -40,9 +39,6 @@ const concat = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
 }
 
 const encodeShortU16 = (value: number): Uint8Array => {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffff) {
-    throw new SvmProtocolError({ message: "Expected a short u16" })
-  }
   const bytes: number[] = []
   let remaining = value
   do {
@@ -54,10 +50,10 @@ const encodeShortU16 = (value: number): Uint8Array => {
   return Uint8Array.from(bytes)
 }
 
-const getOrderedAccounts = (
+const getOrderedAccounts = Effect.fnUntraced(function* (
   feePayer: Address,
   instructions: ReadonlyArray<Instruction>,
-): OrderedAccount[] => {
+) {
   const accounts = new Map<Address, OrderedAccount>([
     [feePayer, { address: feePayer, role: AccountRole.WRITABLE_SIGNER, feePayer: true }],
   ])
@@ -65,29 +61,36 @@ const getOrderedAccounts = (
 
   const upsert = (accountAddress: Address, role: AccountRole) => {
     const existing = accounts.get(accountAddress)
-    if (existing?.feePayer) return
-    const mergedRole = existing === undefined ? role : existing.role | role
+    if (existing?.feePayer) return Effect.void
+    const mergedRole = existing === undefined ? role : ((existing.role | role) as AccountRole)
     if (invokedPrograms.has(accountAddress) && isWritable(mergedRole)) {
-      throw new SvmProtocolError({
-        message: `Invoked program cannot be writable: ${accountAddress}`,
-      })
+      return Effect.fail(
+        new SvmProtocolError({
+          message: `Invoked program cannot be writable: ${accountAddress}`,
+        }),
+      )
     }
     accounts.set(accountAddress, { address: accountAddress, role: mergedRole, feePayer: false })
+    return Effect.void
   }
 
   for (const instruction of instructions) {
     invokedPrograms.add(instruction.programAddress)
     const existingProgram = accounts.get(instruction.programAddress)
     if (existingProgram?.feePayer) {
-      throw new SvmProtocolError({ message: "An invoked program cannot pay transaction fees" })
+      return yield* new SvmProtocolError({
+        message: "An invoked program cannot pay transaction fees",
+      })
     }
     if (existingProgram !== undefined && isWritable(existingProgram.role)) {
-      throw new SvmProtocolError({
+      return yield* new SvmProtocolError({
         message: `Invoked program cannot be writable: ${instruction.programAddress}`,
       })
     }
-    upsert(instruction.programAddress, AccountRole.READONLY)
-    for (const account of instruction.accounts ?? []) upsert(account.address, account.role)
+    yield* upsert(instruction.programAddress, AccountRole.READONLY)
+    for (const account of instruction.accounts ?? []) {
+      yield* upsert(account.address, account.role)
+    }
   }
 
   return [...accounts.values()].sort((left, right) => {
@@ -95,60 +98,72 @@ const getOrderedAccounts = (
     if (isSigner(left.role) !== isSigner(right.role)) return isSigner(left.role) ? -1 : 1
     if (isWritable(left.role) !== isWritable(right.role)) return isWritable(left.role) ? -1 : 1
     return ADDRESS_COMPARATOR(left.address, right.address)
-  })
-}
+  }) as ReadonlyArray<OrderedAccount>
+})
 
 const encodeCompiledInstruction = (
   instruction: Instruction,
   accountIndex: ReadonlyMap<Address, number>,
-): Uint8Array => {
+): Effect.Effect<Uint8Array, SvmProtocolError> => {
   const programIndex = accountIndex.get(instruction.programAddress)
   if (programIndex === undefined) {
-    throw new SvmProtocolError({
-      message: `Missing program account: ${instruction.programAddress}`,
-    })
+    return Effect.fail(
+      new SvmProtocolError({
+        message: `Missing program account: ${instruction.programAddress}`,
+      }),
+    )
   }
-  const accountIndices = Uint8Array.from(
-    (instruction.accounts ?? []).map((account) => {
-      const index = accountIndex.get(account.address)
-      if (index === undefined) {
-        throw new SvmProtocolError({ message: `Missing instruction account: ${account.address}` })
-      }
-      return index
-    }),
-  )
+  const indices: number[] = []
+  for (const account of instruction.accounts ?? []) {
+    const index = accountIndex.get(account.address)
+    if (index === undefined) {
+      return Effect.fail(
+        new SvmProtocolError({ message: `Missing instruction account: ${account.address}` }),
+      )
+    }
+    indices.push(index)
+  }
+  const accountIndices = Uint8Array.from(indices)
   const data = instruction.data ?? new Uint8Array()
-  return concat(
-    Uint8Array.of(programIndex),
-    encodeShortU16(accountIndices.length),
-    accountIndices,
-    encodeShortU16(data.length),
-    data,
+  return Effect.succeed(
+    concat(
+      Uint8Array.of(programIndex),
+      encodeShortU16(accountIndices.length),
+      accountIndices,
+      encodeShortU16(data.length),
+      data,
+    ),
   )
 }
 
-export const compileTransaction = (message: TransactionMessage): Transaction => {
+export const compileTransaction = Effect.fnUntraced(function* (message: TransactionMessage) {
   if (message.instructions.length > 64) {
-    throw new SvmProtocolError({ message: "A transaction supports at most 64 instructions" })
+    return yield* new SvmProtocolError({
+      message: "A transaction supports at most 64 instructions",
+    })
   }
   for (const [index, instruction] of message.instructions.entries()) {
     if ((instruction.accounts?.length ?? 0) > 255) {
-      throw new SvmProtocolError({ message: `Instruction ${index} has too many accounts` })
+      return yield* new SvmProtocolError({
+        message: `Instruction ${index} has too many accounts`,
+      })
     }
   }
 
-  const accounts = getOrderedAccounts(message.feePayer, message.instructions)
-  if (accounts.length > 64)
-    throw new SvmProtocolError({ message: "A transaction supports at most 64 accounts" })
+  const accounts = yield* getOrderedAccounts(message.feePayer, message.instructions)
+  if (accounts.length > 64) {
+    return yield* new SvmProtocolError({ message: "A transaction supports at most 64 accounts" })
+  }
   const signerAccounts = accounts.filter((account) => isSigner(account.role))
   if (signerAccounts.length > 12) {
-    throw new SvmProtocolError({ message: "A transaction supports at most 12 signers" })
+    return yield* new SvmProtocolError({ message: "A transaction supports at most 12 signers" })
   }
 
   const accountIndex = new Map(accounts.map((account, index) => [account.address, index]))
-  const compiledInstructions = message.instructions.map((instruction) =>
-    encodeCompiledInstruction(instruction, accountIndex),
-  )
+  const compiledInstructions: Uint8Array[] = []
+  for (const instruction of message.instructions) {
+    compiledInstructions.push(yield* encodeCompiledInstruction(instruction, accountIndex))
+  }
   const numReadonlySignerAccounts = signerAccounts.filter(
     (account) => !isWritable(account.role),
   ).length
@@ -168,21 +183,14 @@ export const compileTransaction = (message: TransactionMessage): Transaction => 
     addressToBytes(message.lifetimeConstraint.blockhash),
     encodeShortU16(compiledInstructions.length),
     ...compiledInstructions,
-    encodeShortU16(0), // No address lookup tables.
+    encodeShortU16(0),
   )
   const signatures = Object.fromEntries(
     signerAccounts.map((account) => [account.address, null]),
   ) as Record<Address, Uint8Array | null>
-  return { messageBytes, signatures, lifetimeConstraint: message.lifetimeConstraint }
-}
+  return { messageBytes, signatures } satisfies Transaction
+})
 
-/**
- * Partial-sign a compiled transaction with WebCrypto Ed25519 keypairs.
- * Same role as `@solana/transactions` `partiallySignTransaction(keyPairs, tx)`.
- *
- * Prefer this over kit's `partiallySignTransactionMessageWithSigners`:
- * no `TransactionPartialSigner`, no Promise API, no embedding signers in ixs.
- */
 export const partiallySignTransaction = Effect.fnUntraced(function* <T extends Transaction>(
   keyPairs: ReadonlyArray<CryptoKeyPair>,
   transaction: T,
@@ -191,53 +199,51 @@ export const partiallySignTransaction = Effect.fnUntraced(function* <T extends T
   for (const keyPair of keyPairs) {
     const address = yield* addressFromPublicKey(keyPair.publicKey)
     if (!(address in signatures)) {
-      return yield* Effect.fail(
-        new SvmProtocolError({
-          message: `Address is not required to sign this transaction: ${address}`,
-        }),
-      )
+      return yield* new SvmProtocolError({
+        message: `Address is not required to sign this transaction: ${address}`,
+      })
     }
     signatures = {
       ...signatures,
-      [address]: yield* sign(Ed25519PrivateKey.make(keyPair.privateKey), transaction.messageBytes),
+      [address]: yield* Ed25519PrivateKey.sign(
+        Ed25519PrivateKey.Ed25519PrivateKey.make(keyPair.privateKey),
+        transaction.messageBytes,
+      ),
     }
   }
   return { ...transaction, signatures } as T
 })
 
-/** Compile + partial-sign. Drop-in for the useful part of `partiallySignTransactionMessageWithSigners`. */
-export const signTransactionMessage = Effect.fnUntraced(function* (
+export const signTransactionMessage = (
   message: TransactionMessage,
   keyPairs: ReadonlyArray<CryptoKeyPair>,
-) {
-  return yield* partiallySignTransaction(keyPairs, compileTransaction(message))
-})
+) =>
+  compileTransaction(message).pipe(Effect.flatMap((tx) => partiallySignTransaction(keyPairs, tx)))
 
-const getWireTransactionBytes = (transaction: Transaction): Uint8Array => {
+const getWireTransactionBytes = (transaction: Transaction) => {
   const signatures = Object.values(transaction.signatures)
-  if (signatures.length === 0)
-    throw new SvmProtocolError({ message: "A transaction must have at least one signer" })
+  if (signatures.length === 0) {
+    return Effect.fail(
+      new SvmProtocolError({ message: "A transaction must have at least one signer" }),
+    )
+  }
   const wire = concat(
     encodeShortU16(signatures.length),
     ...signatures.map((signature) => signature ?? new Uint8Array(64)),
     transaction.messageBytes,
   )
   if (wire.length > 1232) {
-    throw new SvmProtocolError({ message: `Transaction exceeds 1232 bytes: ${wire.length}` })
+    return Effect.fail(
+      new SvmProtocolError({ message: `Transaction exceeds 1232 bytes: ${wire.length}` }),
+    )
   }
-  return wire
+  return Effect.succeed(wire)
 }
 
-export const getBase64EncodedWireTransaction = (transaction: Transaction): string =>
-  Encoding.encodeBase64(getWireTransactionBytes(transaction))
+export const getBase64EncodedWireTransaction = (transaction: Transaction) =>
+  getWireTransactionBytes(transaction).pipe(Effect.map(Encoding.encodeBase64))
 
-/**
- * What SolanaScheme actually needs: message + keypairs → base64 wire payload.
- * Replaces kit: partiallySignTransactionMessageWithSigners → getBase64EncodedWireTransaction.
- */
-export const encodeSignedTransactionMessage = Effect.fnUntraced(function* (
+export const encodeSignedTransactionMessage = (
   message: TransactionMessage,
   keyPairs: ReadonlyArray<CryptoKeyPair>,
-) {
-  return getBase64EncodedWireTransaction(yield* signTransactionMessage(message, keyPairs))
-})
+) => signTransactionMessage(message, keyPairs).pipe(Effect.flatMap(getBase64EncodedWireTransaction))

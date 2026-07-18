@@ -1,26 +1,32 @@
-import { address, addressToBytes, findProgramDerivedAddress, type Address } from "./SvmAddress.ts"
-import { SvmProtocolError } from "./SvmError.ts"
+import { Effect, Schema as S } from "effect"
+
+import {
+  addressToBytes,
+  findProgramDerivedAddress,
+  SvmAddress,
+  type Address,
+} from "./SvmAddress.ts"
 import { AccountRole, type Instruction } from "./TransactionMessage.ts"
 
-export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS = address(
+export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS = SvmAddress.make(
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
 )
-export const COMPUTE_BUDGET_PROGRAM_ADDRESS = address("ComputeBudget111111111111111111111111111111")
-export const MEMO_PROGRAM_ADDRESS = address("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")
+export const COMPUTE_BUDGET_PROGRAM_ADDRESS = SvmAddress.make(
+  "ComputeBudget111111111111111111111111111111",
+)
+export const MEMO_PROGRAM_ADDRESS = SvmAddress.make("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")
+
+const U32 = S.toType(S.Int.check(S.isBetween({ minimum: 0, maximum: 0xffffffff })))
+const U8 = S.toType(S.Int.check(S.isBetween({ minimum: 0, maximum: 255 })))
+const U64 = S.BigInt.check(S.isBetweenBigInt({ minimum: 0n, maximum: 0xffffffffffffffffn }))
 
 const u32le = (value: number) => {
-  if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
-    throw new SvmProtocolError({ message: "Expected a u32" })
-  }
   const bytes = new Uint8Array(4)
   new DataView(bytes.buffer).setUint32(0, value, true)
   return bytes
 }
 
 const u64le = (value: bigint) => {
-  if (value < 0n || value > 0xffffffffffffffffn) {
-    throw new SvmProtocolError({ message: "Expected a u64" })
-  }
   const bytes = new Uint8Array(8)
   new DataView(bytes.buffer).setBigUint64(0, value, true)
   return bytes
@@ -37,14 +43,22 @@ const dataWithDiscriminator = (discriminator: number, ...fields: Uint8Array[]) =
   return data
 }
 
-export const getSetComputeUnitLimitInstruction = (units: number): Instruction => ({
-  programAddress: COMPUTE_BUDGET_PROGRAM_ADDRESS,
-  data: dataWithDiscriminator(2, u32le(units)),
+export const getSetComputeUnitLimitInstruction = Effect.fnUntraced(function* (units: number) {
+  const n = yield* S.decodeEffect(U32)(units)
+  return {
+    programAddress: COMPUTE_BUDGET_PROGRAM_ADDRESS,
+    data: dataWithDiscriminator(2, u32le(n)),
+  } satisfies Instruction
 })
 
-export const getSetComputeUnitPriceInstruction = (microLamports: bigint): Instruction => ({
-  programAddress: COMPUTE_BUDGET_PROGRAM_ADDRESS,
-  data: dataWithDiscriminator(3, u64le(microLamports)),
+export const getSetComputeUnitPriceInstruction = Effect.fnUntraced(function* (
+  microLamports: bigint,
+) {
+  const n = yield* S.decodeEffect(U64)(microLamports)
+  return {
+    programAddress: COMPUTE_BUDGET_PROGRAM_ADDRESS,
+    data: dataWithDiscriminator(3, u64le(n)),
+  } satisfies Instruction
 })
 
 export const getAddMemoInstruction = (memo: string): Instruction => ({
@@ -63,10 +77,11 @@ export interface TransferCheckedInput {
   readonly decimals: number
 }
 
-export const getTransferCheckedInstruction = (input: TransferCheckedInput): Instruction => {
-  if (!Number.isInteger(input.decimals) || input.decimals < 0 || input.decimals > 255) {
-    throw new SvmProtocolError({ message: "Decimals must be a u8" })
-  }
+export const getTransferCheckedInstruction = Effect.fnUntraced(function* (
+  input: TransferCheckedInput,
+) {
+  const amount = yield* S.decodeEffect(U64)(input.amount)
+  const decimals = yield* S.decodeEffect(U8)(input.decimals)
   return {
     programAddress: input.tokenProgram,
     accounts: [
@@ -75,18 +90,17 @@ export const getTransferCheckedInstruction = (input: TransferCheckedInput): Inst
       { address: input.destination, role: AccountRole.WRITABLE },
       { address: input.authority, role: AccountRole.READONLY_SIGNER },
     ],
-    data: dataWithDiscriminator(12, u64le(input.amount), Uint8Array.of(input.decimals)),
-  }
-}
+    data: dataWithDiscriminator(12, u64le(amount), Uint8Array.of(decimals)),
+  } satisfies Instruction
+})
 
 export const findAssociatedTokenPda = (input: {
   readonly owner: Address
   readonly tokenProgram: Address
   readonly mint: Address
-}) => {
-  return findProgramDerivedAddress(ASSOCIATED_TOKEN_PROGRAM_ADDRESS, [
+}) =>
+  findProgramDerivedAddress(ASSOCIATED_TOKEN_PROGRAM_ADDRESS, [
     addressToBytes(input.owner),
     addressToBytes(input.tokenProgram),
     addressToBytes(input.mint),
   ])
-}

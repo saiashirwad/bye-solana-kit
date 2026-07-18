@@ -1,5 +1,3 @@
-// Subset of crosshatch/Crypto — each module file is a copy of the Crosshatch source.
-// Omitted (not needed for Solana signing): Cek, Envelope, X25519*.
 export * as CryptoKey from "./CryptoKey.ts"
 export * as Ed25519Pair from "./Ed25519Pair.ts"
 export * as Ed25519PrivateKey from "./Ed25519PrivateKey.ts"

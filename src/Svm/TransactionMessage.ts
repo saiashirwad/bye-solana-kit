@@ -1,11 +1,13 @@
 import type { Address, Blockhash } from "./SvmAddress.ts"
 
-export enum AccountRole {
-  READONLY = 0,
-  WRITABLE = 1,
-  READONLY_SIGNER = 2,
-  WRITABLE_SIGNER = 3,
-}
+export const AccountRole = {
+  READONLY: 0,
+  WRITABLE: 1,
+  READONLY_SIGNER: 2,
+  WRITABLE_SIGNER: 3,
+} as const
+
+export type AccountRole = (typeof AccountRole)[keyof typeof AccountRole]
 
 export interface AccountMeta {
   readonly address: Address
@@ -20,7 +22,6 @@ export interface Instruction {
 
 export interface LifetimeConstraint {
   readonly blockhash: Blockhash
-  /** Not on the wire; kept for kit-shaped blockhash responses. */
   readonly lastValidBlockHeight: bigint
 }
 
@@ -31,12 +32,6 @@ export interface TransactionMessage {
   readonly instructions: ReadonlyArray<Instruction>
 }
 
-/**
- * Preferred message constructor — one object, no kit pipe / multi-step setters.
- *
- * Replaces the kit dance of:
- *   pipe(createTransactionMessage({ version: 0 }), setFeePayer, setLifetime, appendIxs)
- */
 export const buildTransactionMessage = (input: {
   readonly feePayer: Address
   readonly lifetimeConstraint: LifetimeConstraint
