@@ -18,32 +18,32 @@ export interface Instruction {
   readonly data?: Uint8Array
 }
 
+export interface LifetimeConstraint {
+  readonly blockhash: Blockhash
+  /** Not on the wire; kept for kit-shaped blockhash responses. */
+  readonly lastValidBlockHeight: bigint
+}
+
 export interface TransactionMessage {
   readonly version: 0
-  readonly feePayer?: Address
-  readonly lifetimeConstraint?: {
-    readonly blockhash: Blockhash
-    readonly lastValidBlockHeight: bigint
-  }
+  readonly feePayer: Address
+  readonly lifetimeConstraint: LifetimeConstraint
   readonly instructions: ReadonlyArray<Instruction>
 }
 
-export const createTransactionMessage = (): TransactionMessage => ({ version: 0, instructions: [] })
-
-export const setTransactionMessageFeePayer = (
-  feePayer: Address,
-  message: TransactionMessage,
-): TransactionMessage => ({
-  ...message,
-  feePayer,
+/**
+ * Preferred message constructor — one object, no kit pipe / multi-step setters.
+ *
+ * Replaces the kit dance of:
+ *   pipe(createTransactionMessage({ version: 0 }), setFeePayer, setLifetime, appendIxs)
+ */
+export const buildTransactionMessage = (input: {
+  readonly feePayer: Address
+  readonly lifetimeConstraint: LifetimeConstraint
+  readonly instructions: ReadonlyArray<Instruction>
+}): TransactionMessage => ({
+  version: 0,
+  feePayer: input.feePayer,
+  lifetimeConstraint: input.lifetimeConstraint,
+  instructions: input.instructions,
 })
-
-export const setTransactionMessageLifetimeUsingBlockhash = (
-  lifetimeConstraint: NonNullable<TransactionMessage["lifetimeConstraint"]>,
-  message: TransactionMessage,
-): TransactionMessage => ({ ...message, lifetimeConstraint })
-
-export const appendTransactionMessageInstructions = (
-  instructions: ReadonlyArray<Instruction>,
-  message: TransactionMessage,
-): TransactionMessage => ({ ...message, instructions: [...message.instructions, ...instructions] })

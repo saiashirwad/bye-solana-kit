@@ -128,11 +128,6 @@ const encodeCompiledInstruction = (
 }
 
 export const compileTransaction = (message: TransactionMessage): Transaction => {
-  if (message.feePayer === undefined)
-    throw new SvmProtocolError({ message: "Transaction message has no fee payer" })
-  if (message.lifetimeConstraint === undefined) {
-    throw new SvmProtocolError({ message: "Transaction message has no blockhash lifetime" })
-  }
   if (message.instructions.length > 64) {
     throw new SvmProtocolError({ message: "A transaction supports at most 64 instructions" })
   }
@@ -181,7 +176,13 @@ export const compileTransaction = (message: TransactionMessage): Transaction => 
   return { messageBytes, signatures, lifetimeConstraint: message.lifetimeConstraint }
 }
 
-/** Kit-shaped: `partiallySignTransaction(keyPairs, transaction)` from `@solana/transactions`. */
+/**
+ * Partial-sign a compiled transaction with WebCrypto Ed25519 keypairs.
+ * Same role as `@solana/transactions` `partiallySignTransaction(keyPairs, tx)`.
+ *
+ * Prefer this over kit's `partiallySignTransactionMessageWithSigners`:
+ * no `TransactionPartialSigner`, no Promise API, no embedding signers in ixs.
+ */
 export const partiallySignTransaction = Effect.fnUntraced(function* <T extends Transaction>(
   keyPairs: ReadonlyArray<CryptoKeyPair>,
   transaction: T,
@@ -204,6 +205,14 @@ export const partiallySignTransaction = Effect.fnUntraced(function* <T extends T
   return { ...transaction, signatures } as T
 })
 
+/** Compile + partial-sign. Drop-in for the useful part of `partiallySignTransactionMessageWithSigners`. */
+export const signTransactionMessage = Effect.fnUntraced(function* (
+  message: TransactionMessage,
+  keyPairs: ReadonlyArray<CryptoKeyPair>,
+) {
+  return yield* partiallySignTransaction(keyPairs, compileTransaction(message))
+})
+
 const getWireTransactionBytes = (transaction: Transaction): Uint8Array => {
   const signatures = Object.values(transaction.signatures)
   if (signatures.length === 0)
@@ -221,3 +230,14 @@ const getWireTransactionBytes = (transaction: Transaction): Uint8Array => {
 
 export const getBase64EncodedWireTransaction = (transaction: Transaction): string =>
   Encoding.encodeBase64(getWireTransactionBytes(transaction))
+
+/**
+ * What SolanaScheme actually needs: message + keypairs → base64 wire payload.
+ * Replaces kit: partiallySignTransactionMessageWithSigners → getBase64EncodedWireTransaction.
+ */
+export const encodeSignedTransactionMessage = Effect.fnUntraced(function* (
+  message: TransactionMessage,
+  keyPairs: ReadonlyArray<CryptoKeyPair>,
+) {
+  return getBase64EncodedWireTransaction(yield* signTransactionMessage(message, keyPairs))
+})
