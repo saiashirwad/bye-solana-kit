@@ -1,31 +1,48 @@
-import { Effect, Encoding, Schema as S } from "effect"
+import { Effect, Schema as S, Context } from "effect"
 
-import { CryptoError } from "./CryptoError.ts"
-import { Ed25519PrivateKey, fromBytes as privateKeyFromBytes } from "./Ed25519PrivateKey.ts"
-import { Ed25519PublicKey, fromBytes as publicKeyFromBytes } from "./Ed25519PublicKey.ts"
+import * as Ed25519PrivateKey from "./Ed25519PrivateKey.ts"
+import * as Ed25519PublicKey from "./Ed25519PublicKey.ts"
 
 const TypeId = "crosshatch/Ed25519Pair" as const
 
-export class Ed25519Pair extends S.Class<Ed25519Pair>("Ed25519Pair")({
-  [TypeId]: S.tag(TypeId),
-  privateKey: Ed25519PrivateKey,
-  publicKey: Ed25519PublicKey,
-}) {}
+export interface Ed25519Pair {
+  readonly [TypeId]: typeof TypeId
+  readonly privateKey: typeof Ed25519PrivateKey.Ed25519PrivateKey.Type
+  readonly publicKey: typeof Ed25519PublicKey.Ed25519PublicKey.Type
+}
 
-export const fromPrivateKeyBytes = Effect.fnUntraced(function* (
-  bytes: Uint8Array,
-  config?: { readonly extractable?: boolean | undefined },
-) {
-  const extractablePrivateKey = yield* privateKeyFromBytes(bytes, { extractable: true })
-  const jwk = yield* Effect.promise(() => crypto.subtle.exportKey("jwk", extractablePrivateKey))
-  if (jwk.x === undefined) {
-    return yield* Effect.fail(
-      new CryptoError({ message: "Ed25519 private JWK has no public coordinate" }),
-    )
-  }
-  const publicKeyBytes = yield* Effect.fromResult(Encoding.decodeBase64Url(jwk.x))
-  const publicKey = yield* publicKeyFromBytes(publicKeyBytes)
-  const privateKey =
-    config?.extractable === true ? extractablePrivateKey : yield* privateKeyFromBytes(bytes)
-  return Ed25519Pair.make({ privateKey, publicKey })
-})
+export const Ed25519Pair = Object.assign(
+  Context.Service<Ed25519Pair, Ed25519Pair>()(TypeId),
+  S.Struct({
+    [TypeId]: S.tag(TypeId),
+    privateKey: Ed25519PrivateKey.Ed25519PrivateKey,
+    publicKey: Ed25519PublicKey.Ed25519PublicKey,
+  }),
+)
+
+export const fromNative = ({ privateKey, publicKey }: CryptoKeyPair) =>
+  Ed25519Pair.make({
+    privateKey: Ed25519PrivateKey.Ed25519PrivateKey.make(privateKey),
+    publicKey: Ed25519PublicKey.Ed25519PublicKey.make(publicKey),
+  })
+
+export const random = (config?: { readonly extractable?: boolean | undefined }) =>
+  Effect.promise(() =>
+    crypto.subtle.generateKey({ name: "Ed25519" }, config?.extractable ?? false, ["sign", "verify"]),
+  ).pipe(Effect.map(fromNative))
+
+export const fromSeed = (bytes: Uint8Array) =>
+  Effect.all({
+    publicKey: Ed25519PrivateKey.fromSeed(bytes, { extractable: true }).pipe(
+      Effect.flatMap((v) => Effect.promise(() => crypto.subtle.exportKey("jwk", v))),
+      Effect.flatMap(({ x }) =>
+        Effect.promise(() =>
+          crypto.subtle.importKey("jwk", { crv: "Ed25519", kty: "OKP", ...(x && { x }) }, { name: "Ed25519" }, true, [
+            "verify",
+          ]),
+        ),
+      ),
+      Effect.map((v) => Ed25519PublicKey.Ed25519PublicKey.make(v)),
+    ),
+    privateKey: Ed25519PrivateKey.fromSeed(bytes),
+  }).pipe(Effect.map((v) => Ed25519Pair.make(v)))

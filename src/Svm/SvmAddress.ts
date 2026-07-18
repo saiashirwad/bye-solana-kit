@@ -1,5 +1,6 @@
 import { Effect, Option, Schema as S } from "effect"
 
+import * as CryptoKey from "../Crypto/CryptoKey.ts"
 import { compressedPointIsOnCurve } from "./Curve.ts"
 import { PdaOnCurveError, SvmProtocolError } from "./SvmError.ts"
 
@@ -77,10 +78,8 @@ export const addressFromBytes = (bytes: Uint8Array): Address => {
 
 export const addressToBytes = (value: Address): Uint8Array => base58Decode(value)
 
-export const addressFromPublicKey = (publicKey: CryptoKey) =>
-  Effect.promise(() => crypto.subtle.exportKey("raw", publicKey)).pipe(
-    Effect.map((bytes) => addressFromBytes(new Uint8Array(bytes))),
-  )
+export const addressFromPublicKey = (publicKey: typeof CryptoKey.CryptoKey.Type) =>
+  CryptoKey.toBytes(publicKey).pipe(Effect.map((bytes) => addressFromBytes(bytes)))
 
 const createProgramAddress = Effect.fnUntraced(function* (
   programAddress: Address,

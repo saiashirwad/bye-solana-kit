@@ -1,7 +1,7 @@
 import { Effect, Encoding } from "effect"
 
-import { Ed25519PrivateKey } from "../Crypto/Ed25519PrivateKey.ts"
-import { addressToBytes, type Address } from "./SvmAddress.ts"
+import { Ed25519PrivateKey, sign } from "../Crypto/Ed25519PrivateKey.ts"
+import { addressFromPublicKey, addressToBytes, type Address } from "./SvmAddress.ts"
 import { SvmProtocolError } from "./SvmError.ts"
 import { AccountRole, type Instruction, type TransactionMessage } from "./TransactionMessage.ts"
 
@@ -39,7 +39,7 @@ const concat = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
   return output
 }
 
-export const encodeShortU16 = (value: number): Uint8Array => {
+const encodeShortU16 = (value: number): Uint8Array => {
   if (!Number.isInteger(value) || value < 0 || value > 0xffff) {
     throw new SvmProtocolError({ message: "Expected a short u16" })
   }
@@ -181,27 +181,30 @@ export const compileTransaction = (message: TransactionMessage): Transaction => 
   return { messageBytes, signatures, lifetimeConstraint: message.lifetimeConstraint }
 }
 
+/** Kit-shaped: `partiallySignTransaction(keyPairs, transaction)` from `@solana/transactions`. */
 export const partiallySignTransaction = Effect.fnUntraced(function* <T extends Transaction>(
+  keyPairs: ReadonlyArray<CryptoKeyPair>,
   transaction: T,
-  signer: { readonly address: Address; readonly privateKey: typeof Ed25519PrivateKey.Type },
 ) {
-  if (!(signer.address in transaction.signatures)) {
-    return yield* Effect.fail(
-      new SvmProtocolError({
-        message: `Address is not required to sign this transaction: ${signer.address}`,
-      }),
-    )
+  let signatures: Record<Address, Uint8Array | null> = { ...transaction.signatures }
+  for (const keyPair of keyPairs) {
+    const address = yield* addressFromPublicKey(keyPair.publicKey)
+    if (!(address in signatures)) {
+      return yield* Effect.fail(
+        new SvmProtocolError({
+          message: `Address is not required to sign this transaction: ${address}`,
+        }),
+      )
+    }
+    signatures = {
+      ...signatures,
+      [address]: yield* sign(Ed25519PrivateKey.make(keyPair.privateKey), transaction.messageBytes),
+    }
   }
-  const signature = yield* Effect.promise(() =>
-    crypto.subtle.sign("Ed25519", signer.privateKey, Uint8Array.from(transaction.messageBytes)),
-  ).pipe(Effect.map((value) => new Uint8Array(value)))
-  return {
-    ...transaction,
-    signatures: { ...transaction.signatures, [signer.address]: signature },
-  } as T
+  return { ...transaction, signatures } as T
 })
 
-export const getWireTransactionBytes = (transaction: Transaction): Uint8Array => {
+const getWireTransactionBytes = (transaction: Transaction): Uint8Array => {
   const signatures = Object.values(transaction.signatures)
   if (signatures.length === 0)
     throw new SvmProtocolError({ message: "A transaction must have at least one signer" })

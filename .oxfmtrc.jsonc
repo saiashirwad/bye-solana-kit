@@ -4,4 +4,13 @@
   "sortPackageJson": {},
   "sortImports": {},
   "proseWrap": "always",
+  "ignorePatterns": [
+    // Exact copies of crosshatch/Crypto — do not reformat (re-copy from Crosshatch instead).
+    "src/Crypto/CryptoKey.ts",
+    "src/Crypto/Hmac.ts",
+    "src/Crypto/Slip10.ts",
+    "src/Crypto/Ed25519PrivateKey.ts",
+    "src/Crypto/Ed25519PublicKey.ts",
+    "src/Crypto/Ed25519Pair.ts",
+  ],
 }

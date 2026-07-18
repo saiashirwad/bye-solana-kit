@@ -12,7 +12,7 @@ describe(import.meta.url, () => {
   it.effect(
     "matches the BIP-39 mnemonic-to-seed vector",
     Effect.fn(function* () {
-      expect(Encoding.encodeHex(yield* Mnemonic.toSeed(Mnemonic.make(mnemonicText)))).toBe(
+      expect(Encoding.encodeHex(yield* Mnemonic.toSeed(Mnemonic.fromText(mnemonicText)))).toBe(
         "5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4",
       )
     }),
@@ -21,11 +21,11 @@ describe(import.meta.url, () => {
   it.effect(
     "matches the existing Solana derivation vector",
     Effect.fn(function* () {
-      const privateKey = yield* Slip10.derivePrivateKey(seed, [44, 501, 0, 0])
-      const pair = yield* Ed25519Pair.fromPrivateKeyBytes(privateKey)
+      const { privateKeySeed } = yield* Slip10.derive(seed, [44, 501, 0, 0])
+      const pair = yield* Ed25519Pair.fromSeed(privateKeySeed)
       const message = new TextEncoder().encode("crosshatching")
       const signature = yield* Ed25519PrivateKey.sign(pair.privateKey, message)
-      expect(Encoding.encodeHex(privateKey)).toBe(
+      expect(Encoding.encodeHex(privateKeySeed)).toBe(
         "f1f890d181d1bc1fdfdb9e1911e59285b9f8a28c5c31c13e56747e6993bfa053",
       )
       expect(yield* addressFromPublicKey(pair.publicKey)).toBe(
@@ -37,11 +37,20 @@ describe(import.meta.url, () => {
   )
 
   it.effect(
+    "rejects invalid SLIP-0010 path components",
+    Effect.fn(function* () {
+      expect(Exit.isFailure(yield* Effect.exit(Slip10.derive(seed, [-1])))).toBe(true)
+      expect(Exit.isFailure(yield* Effect.exit(Slip10.derive(seed, [1.5])))).toBe(true)
+      expect(Exit.isFailure(yield* Effect.exit(Slip10.derive(seed, [2147483648])))).toBe(true)
+    }),
+  )
+
+  it.effect(
     "rejects a seed that is not 32 bytes",
     Effect.fn(function* () {
-      expect(
-        Exit.isFailure(yield* Effect.exit(Ed25519Pair.fromPrivateKeyBytes(new Uint8Array(31)))),
-      ).toBe(true)
+      expect(Exit.isFailure(yield* Effect.exit(Ed25519Pair.fromSeed(new Uint8Array(31))))).toBe(
+        true,
+      )
     }),
   )
 })
